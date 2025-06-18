@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Agenda’s per Regio Selecteren + Alle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0; padding: 1rem;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      gap: 2rem;
+      box-sizing: border-box;
+      flex-wrap: wrap;
+    }
+    .container {
+      max-width: 1000px;
+      width: 100%;
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .selection-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-width: 220px;
+      background: white;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    label {
+      cursor: pointer;
+      user-select: none;
+      font-size: 1rem;
+      color: #222;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .color-box {
+      width: 18px; height: 18px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    select {
+      padding: 0.4rem 0.6rem;
+      font-size: 1rem;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+    .agenda-wrapper {
+      position: relative;
+      flex: 1 1 600px;
+      max-width: 900px;
+      padding-bottom: 75%;
+      height: 0;
+      overflow: hidden;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      background: white;
+    }
+    iframe {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 8px;
+    }
+    @media (max-width: 700px) {
+      body {
+        padding: 1rem 0.5rem;
+      }
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+      .selection-wrapper {
+        width: 90vw;
+        max-height: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+      }
+      label {
+        white-space: nowrap;
+      }
+      .agenda-wrapper {
+        width: 90vw;
+        max-width: none;
+        padding-bottom: 56.25%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <div class="selection-wrapper" role="region" aria-label="Agenda selectie">
+      <label for="regionSelect"><strong>Kies regio</strong></label>
+      <select id="regionSelect" aria-label="Kies regio">
+        <option value="alle">Alle</option>
+        <option value="noord">Noord</option>
+        <option value="midden">Midden</option>
+        <option value="zuid">Zuid</option>
+      </select>
+
+      <div id="checkboxContainer" role="group" aria-label="Selecteer agenda's">
+        <!-- Dynamische checkboxes -->
+      </div>
+    </div>
+
+    <div class="agenda-wrapper" aria-live="polite">
+      <iframe id="calendarFrame"
+        src=""
+        scrolling="no"
+        frameborder="0"
+        title="Google Calendar"
+        aria-label="Google Kalender overzicht"
+      ></iframe>
+    </div>
+
+  </div>
+
+<script>
+  const iframe = document.getElementById('calendarFrame');
+  const container = document.getElementById('checkboxContainer');
+  const regionSelect = document.getElementById('regionSelect');
+
+  const agendasPerRegion = {
+    noord: {
+      kaldenbroek: {
+        id: "4m9bibflrr7k394ka4mj8fpef9djcrdg@import.calendar.google.com",
+        color: "#4CAF50", // groen
+        name: "Kaldenbroek"
+      }
+    },
+    midden: {
+      grathemermolen: {
+        id: "ntot1q516t38keavnjqfnmhnhtuhlbl1@import.calendar.google.com",
+        color: "#add8e6", // licht oranje
+        name: "Grathemermolen"
+      },
+      heerenhof_achterhuis: {
+        id: "k21pp1tmj9b7qhtg7ndh31r3k38uhcuh@import.calendar.google.com",
+        color: "#81C784", // licht groen
+        name: "Heerenhof Achterhuis"
+      },
+      heerenhof_achterhuis_xs: {
+        id: "7fnor50dvqhutv0oghk3q8jehj8ajkbd@import.calendar.google.com",
+        color: "#81C784", // licht groen
+        name: "Heerenhof Achterhuis XS"
+      },
+      heerenhof_totaal: {
+        id: "o8s002fup0160lr7hba50h2rovskq645@import.calendar.google.com",
+        color: "#81C784", // licht groen
+        name: "Heerenhof Totaal"
+      },
+      heerenhof_voorhuis: {
+        id: "1pq5otb9bvno8nqoenjen6ojuifoh9km@import.calendar.google.com",
+        color: "#81C784", // licht groen
+        name: "Heerenhof Voorhuis"
+      },
+      heerenhof_voorhuis_xs: {
+        id: "nc04q6jedsc58qpi9rckqf5pfmvcnnc1@import.calendar.google.com",
+        color: "#81C784", // licht groen
+        name: "Heerenhof Voorhuis XS"
+      },
+      koningshof_klaproos: {
+        id: "m18ino3lq6ctvdcng18ta126303s9nsh@import.calendar.google.com",
+        color: "#FFB74D", // licht oranje
+        name: "Koningshof Klaproos"
+      },
+      koningshof_klaproos_xs: {
+        id: "nvcf23b0ejj99d66t59r6g9p9fnb07af@import.calendar.google.com",
+        color: "#FFB74D", // licht oranje
+        name: "Koningshof Klaproos XS"
+      },
+      koningshof_korenbloem: {
+        id: "72213skpqlktd5ee3fvo4qsllj1bh1bu@import.calendar.google.com",
+        color: "#FFB74D", // licht oranje
+        name: "Koningshof Korenbloem"
+      },
+      koningshof_totaal: {
+        id: "f0p4s0eev5rnq66niklroc8sf7v28h07@import.calendar.google.com",
+        color: "#FFB74D", // licht oranje
+        name: "Koningshof Totaal"
+      },
+      huisje_merum: {
+        id: "da9sl5mthtk5vnm7uelri3qbhk2f21lp@import.calendar.google.com",
+        color: "#C62828", // donker rood
+        name: "Huisje Merum"
+      },
+      huisje_merum_xs: {
+        id: "nbno7htt6b1v8jrcirjb2k0t8s25nl96@import.calendar.google.com",
+        color: "#C62828", // donker rood
+        name: "Huisje Merum XS"
+      }
+    },
+    zuid: {
+      bervesj_huis: {
+        id: "rsi8psgk7r31rc996kued18sl4l8grb6@import.calendar.google.com",
+        color: "#EF9A9A", // licht rood
+        name: "Bervesj Huis"
+      },
+      bervesj_schuur: {
+        id: "tbevtrujluiig0ona39h4i8fh7lvhpsg@import.calendar.google.com",
+        color: "#EF9A9A", // licht rood
+        name: "Bervesj Schuur"
+      },
+      frankenhof_huys: {
+        id: "38v8dlmuf0b4b4sfk4d2dt16oblp088k@import.calendar.google.com",
+        color: "#CE93D8", // licht paars
+        name: "Frankenhof Huys"
+      },
+      frankenhof_huys_xs: {
+        id: "b6c8ej23e2fmjrgpk4unop2gctphih29@import.calendar.google.com",
+        color: "#CE93D8", // licht paars
+        name: "Frankenhof Huys XS"
+      },
+      frankenhof_weverij: {
+        id: "loslt5ghj3m2ivngep38rusjh6vl6sps@import.calendar.google.com",
+        color: "#CE93D8", // licht paars
+        name: "Frankenhof Weverij"
+      },
+      frankenhof_weverij_xs: {
+        id: "bm3a2mddaloqldlkhn110242osmhd6cs@import.calendar.google.com",
+        color: "#CE93D8", // licht paars
+        name: "Frankenhof Weverij XS"
+      },
+      wittemermolen: {
+        id: "o9lbjlulghh5clf6nkgnvd26ebgnebcg@import.calendar.google.com",
+        color: "#1976D2", // blauw
+        name: "Wittemermolen"
+      },
+      wittemermolen_xs: {
+        id: "eg0e544bgqqp9a8t3vuuknm5m1f122bp@import.calendar.google.com",
+        color: "#1976D2", // blauw
+        name: "Wittemermolen XS"
+      },
+      nieuw_ehrenstein_kowstjal: {
+        id: "i49l7eighcv5lbevi2rmmn7jl4en0if2@import.calendar.google.com",
+        color: "#8a6642", // Bruin
+        name: "Nieuw Ehrenstein Kowstjal"
+      },
+      nieuw_ehrenstein_peedssjtal: {
+        id: "3ot3kcg5tg225i90q8ag0kd35gh2p62k@import.calendar.google.com",
+        color: "#8a6642", // Bruin
+        name: "Nieuw Ehrenstein Peëdssjtal"
+      },
+      nieuw_ehrenstein_remise: {
+        id: "3sg82m1jef3lfhn06tvcnqsc0mo2s2ov@import.calendar.google.com",
+        color: "#8a6642", // Bruin
+        name: "Nieuw Ehrenstein Remise"
+      },
+      nieuw_ehrenstein_villa: {
+        id: "brtndu8psmjhktqqkagor03r1ts14jdk@import.calendar.google.com",
+        color: "#8a6642", // Bruin
+        name: "Nieuw Ehrenstein Villa"
+      },
+      nieuw_ehrenstein_villa_xs: {
+        id: "27gltnc143kaqus2rbbu2hh172ljci0k@import.calendar.google.com",
+        color: "#8a6642", // Bruin
+        name: "Nieuw Ehrenstein Villa XS"
+      }
+    }
+  };
+
+  // Combineer alle agendas in 1 object, voor 'Alle' regio
+  const allAgendas = {...agendasPerRegion.noord, ...agendasPerRegion.midden, ...agendasPerRegion.zuid};
+
+  // Sets van geselecteerde checkboxen per regio (standaard allemaal geselecteerd)
+  const selectedCheckboxes = {
+    alle: new Set(Object.keys(allAgendas)),
+    noord: new Set(Object.keys(agendasPerRegion.noord)),
+    midden: new Set(Object.keys(agendasPerRegion.midden)),
+    zuid: new Set(Object.keys(agendasPerRegion.zuid))
+  };
+
+  // Functie om checkboxes te bouwen, alfabetisch op naam gesorteerd
+  function buildCheckboxes(region) {
+    container.innerHTML = "";
+    const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
+    // Sorteer op naam
+    const sortedKeys = Object.keys(agendas).sort((a,b) => agendas[a].name.localeCompare(agendas[b].name));
+    for (const key of sortedKeys) {
+      const agenda = agendas[key];
+      const label = document.createElement('label');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = key;
+      checkbox.checked = selectedCheckboxes[region].has(key);
+
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedCheckboxes[region].add(key);
+        } else {
+          selectedCheckboxes[region].delete(key);
+        }
+        updateIframeSrc();
+      });
+
+      const colorBox = document.createElement('span');
+      colorBox.className = 'color-box';
+      colorBox.style.background = agenda.color;
+
+      label.appendChild(checkbox);
+      label.appendChild(colorBox);
+      label.appendChild(document.createTextNode(agenda.name));
+      container.appendChild(label);
+    }
+  }
+
+  // Functie die iframe URL bouwt op basis van geselecteerde agenda's
+  function updateIframeSrc() {
+    const region = regionSelect.value;
+    const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
+    const selected = region === "alle" ? selectedCheckboxes.alle : selectedCheckboxes[region];
+    const baseUrl = "https://calendar.google.com/calendar/embed?mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0";
+
+    // Voeg geselecteerde kalender id's toe met kleur
+    let url = baseUrl;
+    for (const key of selected) {
+      if (agendas[key]) {
+        const agenda = agendas[key];
+        url += `&src=${encodeURIComponent(agenda.id)}&color=${encodeURIComponent(agenda.color)}`;
+      }
+    }
+    iframe.src = url;
+  }
+
+  // Init bij laden
+  function init() {
+    buildCheckboxes('alle');
+    updateIframeSrc();
+  }
+
+  // Regio selectie veranderen
+  regionSelect.addEventListener('change', () => {
+    buildCheckboxes(regionSelect.value);
+    updateIframeSrc();
+  });
+
+  init();
+
+</script>
+
+</body>
+</html>
