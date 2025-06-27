@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<title>Agenda Tijdbalk met ICS + CORS Proxy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: Arial; margin:0; padding:0; background:#f4f4f4; }
+  .container { display:flex; flex-direction: row; height: 100vh; max-width: 100vw; }
+  .sidebar {
+    width: 320px; background: white; padding: 1rem 1.5rem; box-sizing: border-box;
+    border-right: 1px solid #ccc; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem;
+  }
+  label { cursor: pointer; user-select: none; font-size: 1rem; color: #222; display: flex; align-items: center; gap: 8px; }
+  .color-box { width: 18px; height: 18px; border-radius: 3px; flex-shrink: 0; }
+  select {
+    padding: .4rem .6rem; font-size: 1rem; border-radius: 4px; border: 1px solid #ccc;
+    cursor: pointer; width: 100%; box-sizing: border-box;
+  }
+  .content {
+    flex-grow: 1; padding: 1rem; box-sizing: border-box; background: white;
+    display: flex; flex-direction: column; border-radius: 0 8px 8px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow-y: auto;
+  }
+  .timeline {
+    position: relative;
+    border: 1px solid #ddd;
+    height: auto;
+    min-height: 200px;
+    margin-top: 1rem;
+    padding: 10px 40px 10px 60px;
+    font-size: 14px;
+  }
+  .time-labels {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-weight: bold;
+  }
+  .agenda-row {
+    position: relative;
+    height: 30px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #eee;
+  }
+  .agenda-name {
+    position: absolute;
+    left: 0;
+    top: 5px;
+    width: 55px;
+    font-size: 12px;
+    color: #444;
+    user-select: none;
+  }
+  .event-bar {
+    position: absolute;
+    height: 22px;
+    top: 4px;
+    border-radius: 4px;
+    color: white;
+    padding-left: 6px;
+    font-size: 12px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  @media (max-width: 700px) {
+    .container { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #ccc; max-height: 250px; }
+    .content { height: calc(100vh - 250px); border-radius: 0 0 8px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="sidebar" role="region" aria-label="Agenda selectie">
+    <label for="regionSelect"><strong>Kies regio</strong></label>
+    <select id="regionSelect" aria-controls="checkboxContainer">
+      <option value="alle">Alle</option>
+      <option value="noord">Noord</option>
+      <option value="midden">Midden</option>
+      <option value="zuid">Zuid</option>
+    </select>
+    <label><input type="checkbox" id="toggleAll" /> Selecteer alle agenda's</label>
+    <div id="checkboxContainer" role="group" aria-label="Selecteer agenda's"></div>
+  </div>
+  <div class="content" aria-live="polite" aria-atomic="true">
+    <div id="timelineTitle"><strong>Tijdbalk van komende 2 weken</strong></div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+</div>
+
+<script>
+// --- DATA --- 
+const agendasPerRegion = {
+noord: {
+    kaldenbroek: {
+      url: "https://calendar.google.com/calendar/ical/4m9bibflrr7k394ka4mj8fpef9djcrdg%40import.calendar.google.com/public/basic.ics",
+      color: "#4CAF50",
+      name: "Kaldenbroek",
+    },
+    vakantiewoningensll: {
+      url: "https://calendar.google.com/calendar/ical/vakantiewoningensllll%40gmail.com/public/basic.ics",
+      color: "#FFC107",
+      name: "Vakantiewoning SLL",
+    },
+  },
+  midden: {
+    grathemermolen: {
+      url: "https://calendar.google.com/calendar/ical/ntot1q516t38keavnjqfnmhnhtuhlbl1%40import.calendar.google.com/public/basic.ics",
+      color: "#add8e6",
+      name: "Grathemermolen",
+    },
+    heerenhof_achterhuis: {
+      url: "https://calendar.google.com/calendar/ical/k21pp1tmj9b7qhtg7ndh31r3k38uhcuh%40import.calendar.google.com/public/basic.ics",
+      color: "#81C784",
+      name: "Heerenhof Achterhuis",
+    },
+    heerenhof_achterhuis_xs: {
+      url: "https://calendar.google.com/calendar/ical/7fnor50dvqhutv0oghk3q8jehj8ajkbd%40import.calendar.google.com/public/basic.ics",
+      color: "#81C784",
+      name: "Heerenhof Achterhuis XS",
+    },
+    heerenhof_totaal: {
+      url: "https://calendar.google.com/calendar/ical/o8s002fup0160lr7hba50h2rovskq645%40import.calendar.google.com/public/basic.ics",
+      color: "#81C784",
+      name: "Heerenhof Totaal",
+    },
+    heerenhof_voorhuis: {
+      url: "https://calendar.google.com/calendar/ical/1pq5otb9bvno8nqoenjen6ojuifoh9km%40import.calendar.google.com/public/basic.ics",
+      color: "#81C784",
+      name: "Heerenhof Voorhuis",
+    },
+    heerenhof_voorhuis_xs: {
+      url: "https://calendar.google.com/calendar/ical/nc04q6jedsc58qpi9rckqf5pfmvcnnc1%40import.calendar.google.com/public/basic.ics",
+      color: "#81C784",
+      name: "Heerenhof Voorhuis XS",
+    },
+    koningshof_klaproos: {
+      url: "https://calendar.google.com/calendar/ical/m18ino3lq6ctvdcng18ta126303s9nsh%40import.calendar.google.com/public/basic.ics",
+      color: "#FFB74D",
+      name: "Koningshof Klaproos",
+    },
+    koningshof_klaproos_xs: {
+      url: "https://calendar.google.com/calendar/ical/nvcf23b0ejj99d66t59r6g9p9fnb07af%40import.calendar.google.com/public/basic.ics",
+      color: "#FFB74D",
+      name: "Koningshof Klaproos XS",
+    },
+    koningshof_korenbloem: {
+      url: "https://calendar.google.com/calendar/ical/72213skpqlktd5ee3fvo4qsllj1bh1bu%40import.calendar.google.com/public/basic.ics",
+      color: "#FFB74D",
+      name: "Koningshof Korenbloem",
+    },
+    koningshof_totaal: {
+      url: "https://calendar.google.com/calendar/ical/f0p4s0eev5rnq66niklroc8sf7v28h07%40import.calendar.google.com/public/basic.ics",
+      color: "#FFB74D",
+      name: "Koningshof Totaal",
+    },
+    huisje_merum: {
+      url: "https://calendar.google.com/calendar/ical/da9sl5mthtk5vnm7uelri3qbhk2f21lp%40import.calendar.google.com/public/basic.ics",
+      color: "#C62828",
+      name: "Huisje Merum",
+    },
+    huisje_merum_xs: {
+      url: "https://calendar.google.com/calendar/ical/nbno7htt6b1v8jrcirjb2k0t8s25nl96%40import.calendar.google.com/public/basic.ics",
+      color: "#C62828",
+      name: "Huisje Merum XS",
+    },
+  },
+  zuid: {
+    bervesj_huis: {
+      url: "https://calendar.google.com/calendar/ical/rsi8psgk7r31rc996kued18sl4l8grb6%40import.calendar.google.com/public/basic.ics",
+      color: "#EF9A9A",
+      name: "Bervesj Huis",
+    },
+    bervesj_schuur: {
+      url: "https://calendar.google.com/calendar/ical/tbevtrujluiig0ona39h4i8fh7lvhpsg%40import.calendar.google.com/public/basic.ics",
+      color: "#EF9A9A",
+      name: "Bervesj Schuur",
+    },
+    frankenhof_huys: {
+      url: "https://calendar.google.com/calendar/ical/38v8dlmuf0b4b4sfk4d2dt16oblp088k%40import.calendar.google.com/public/basic.ics",
+      color: "#CE93D8",
+      name: "Frankenhof Huys",
+    },
+    frankenhof_huys_xs: {
+      url: "https://calendar.google.com/calendar/ical/b6c8ej23e2fmjrgpk4unop2gctphih29%40import.calendar.google.com/public/basic.ics",
+      color: "#CE93D8",
+      name: "Frankenhof Huys XS",
+    },
+    frankenhof_weverij: {
+      url: "https://calendar.google.com/calendar/ical/loslt5ghj3m2ivngep38rusjh6vl6sps%40import.calendar.google.com/public/basic.ics",
+      color: "#CE93D8",
+      name: "Frankenhof Weverij",
+    },
+    frankenhof_weverij_xs: {
+      url: "https://calendar.google.com/calendar/ical/bm3a2mddaloqldlkhn110242osmhd6cs%40import.calendar.google.com/public/basic.ics",
+      color: "#CE93D8",
+      name: "Frankenhof Weverij XS",
+    },
+    wittemermolen: {
+      url: "https://calendar.google.com/calendar/ical/o9lbjlulghh5clf6nkgnvd26ebgnebcg%40import.calendar.google.com/public/basic.ics",
+      color: "#1976D2",
+      name: "Wittemermolen",
+    },
+    wittemermolen_xs: {
+      url: "https://calendar.google.com/calendar/ical/eg0e544bgqqp9a8t3vuuknm5m1f122bp%40import.calendar.google.com/public/basic.ics",
+      color: "#1976D2",
+      name: "Wittemermolen XS",
+    },
+    nieuw_ehrenstein_kowstjal: {
+      url: "https://calendar.google.com/calendar/ical/i49l7eighcv5lbevi2rmmn7jl4en0if2%40import.calendar.google.com/public/basic.ics",
+      color: "#8a6642",
+      name: "Nieuw Ehrenstein Kowstjal",
+    },
+    nieuw_ehrenstein_peedssjtal: {
+      url: "https://calendar.google.com/calendar/ical/3ot3kcg5tg225i90q8ag0kd35gh2p62k%40import.calendar.google.com/public/basic.ics",
+      color: "#8a6642",
+      name: "Nieuw Ehrenstein Peëdssjtal",
+    },
+    nieuw_ehrenstein_remise: {
+      url: "https://calendar.google.com/calendar/ical/3sg82m1jef3lfhn06tvcnqsc0mo2s2ov%40import.calendar.google.com/public/basic.ics",
+      color: "#8a6642",
+      name: "Nieuw Ehrenstein Remise",
+    },
+    nieuw_ehrenstein_villa: {
+      url: "https://calendar.google.com/calendar/ical/brtndu8psmjhktqqkagor03r1ts14jdk%40import.calendar.google.com/public/basic.ics",
+      color: "#8a6642",
+      name: "Nieuw Ehrenstein Villa",
+    },
+    nieuw_ehrenstein_villa_xs: {
+      url: "https://calendar.google.com/calendar/ical/27gltnc143kaqus2rbbu2hh172ljci0k%40import.calendar.google.com/public/basic.ics",
+      color: "#8a6642",
+      name: "Nieuw Ehrenstein Villa XS", }
+
+  }
+};
+
+const allAgendas = {...agendasPerRegion.noord, ...agendasPerRegion.midden, ...agendasPerRegion.zuid};
+const selectedCheckboxes = {
+  alle: new Set(Object.keys(allAgendas)),
+  noord: new Set(Object.keys(agendasPerRegion.noord)),
+  midden: new Set(Object.keys(agendasPerRegion.midden)),
+  zuid: new Set(Object.keys(agendasPerRegion.zuid))
+};
+
+const corsProxy = 'https://snowy-fog-8ab2.testsll.workers.dev/cors-proxy.php?url=';
+
+const timeline = document.getElementById('timeline');
+const container = document.getElementById('checkboxContainer');
+const regionSelect = document.getElementById('regionSelect');
+const toggleAll = document.getElementById('toggleAll');
+
+// --- BUILD CHECKBOXES ---
+function buildCheckboxes(region) {
+  container.innerHTML = "";
+  const agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+  Object.keys(agendas).sort((a,b) => agendas[a].name.localeCompare(agendas[b].name))
+    .forEach(key => {
+      const ag = agendas[key];
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = key;
+      cb.checked = selectedCheckboxes[region].has(key);
+      cb.addEventListener('change', () => {
+        if(cb.checked) selectedCheckboxes[region].add(key);
+        else selectedCheckboxes[region].delete(key);
+        updateToggleAll();
+        loadAndRenderEvents();
+      });
+      const color = document.createElement('span');
+      color.className = 'color-box';
+      color.style.background = ag.color;
+      label.append(cb, color, document.createTextNode(ag.name));
+      container.appendChild(label);
+    });
+  updateToggleAll();
+}
+
+// --- UPDATE TOGGLE ALL CHECKBOX ---
+function updateToggleAll() {
+  const region = regionSelect.value;
+  const agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+  const keys = Object.keys(agendas);
+  const selected = selectedCheckboxes[region];
+  toggleAll.checked = keys.every(k => selected.has(k));
+}
+
+toggleAll.addEventListener('change', () => {
+  const region = regionSelect.value;
+  const agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+  const keys = Object.keys(agendas);
+  if(toggleAll.checked) {
+    keys.forEach(k => selectedCheckboxes[region].add(k));
+  } else {
+    keys.forEach(k => selectedCheckboxes[region].delete(k));
+  }
+  buildCheckboxes(region);
+  loadAndRenderEvents();
+});
+
+regionSelect.addEventListener('change', () => {
+  buildCheckboxes(regionSelect.value);
+  loadAndRenderEvents();
+});
+
+// --- ICS Parser (basic) ---
+function parseICS(data) {
+  const vevents = data.split(/BEGIN:VEVENT|END:VEVENT/).filter(s => s.trim().length > 0);
+  const events = [];
+  for(const vevent of vevents) {
+    const dtstartMatch = vevent.match(/DTSTART(?:;[^:]*)?:(.+)/);
+    const dtendMatch = vevent.match(/DTEND(?:;[^:]*)?:(.+)/);
+    const summaryMatch = vevent.match(/SUMMARY:(.+)/);
+    if(dtstartMatch && dtendMatch && summaryMatch) {
+      const start = parseICSTime(dtstartMatch[1]);
+      const end = parseICSTime(dtendMatch[1]);
+      if(start && end) {
+        events.push({
+          start, end,
+          summary: summaryMatch[1].trim()
+        });
+      }
+    }
+  }
+  return events;
+}
+
+function parseICSTime(s) {
+  // Format: 20250621T100000Z or 20250621T100000 or 20250621
+  if(!s) return null;
+  if(s.length === 8) {
+    // Datum zonder tijd, doe tijd 00:00 UTC
+    const y = s.substr(0,4), m = s.substr(4,2), d = s.substr(6,2);
+    return new Date(Date.UTC(+y, +m-1, +d,0,0,0));
+  }
+  // Datum tijd met of zonder Z
+  const dt = s.endsWith('Z') ? s : s + 'Z';
+  return new Date(dt.substr(0,4) + '-' + dt.substr(4,2) + '-' + dt.substr(6,2) + 'T' + dt.substr(9,2) + ':' + dt.substr(11,2) + ':' + dt.substr(13,2) + 'Z');
+}
+
+// --- FETCH ICS via proxy ---
+async function loadICS(url) {
+  try {
+    const res = await fetch(corsProxy + encodeURIComponent(url));
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    return await res.text();
+  } catch(e) {
+    console.error("Fout bij laden ICS:", e);
+    return "";
+  }
+}
+const titleElement = document.getElementById('timelineTitle');
+const currentYear = new Date().getFullYear();
+titleElement.innerHTML = `<strong>Tijdbalk van komende 2 weken (${currentYear})</strong>`;
+
+// --- RENDER TIJDBALK ---
+function renderTimeline(eventsByAgenda) {
+  timeline.innerHTML = "";
+  const now = new Date();
+  const endDate = new Date(now.getTime() + 14*24*3600*1000); // 2 weken vooruit
+
+// Tijdslijn labels met dagnaam
+const labelsDiv = document.createElement('div');
+labelsDiv.className = 'time-labels';
+
+const dayNames = ['zo', 'ma', 'di', 'wo', 'do', 'vr', 'za'];
+
+for(let d = new Date(now); d <= endDate; d.setDate(d.getDate() + 1)) {
+  const label = document.createElement('span');
+  label.style.flex = "1";
+  label.style.textAlign = "center";
+
+  // Lichtgrijze achtergrond voor weekend (zondag=0, zaterdag=6)
+  const day = d.getDay();
+  if(day === 0 || day === 6) {
+    label.style.backgroundColor = '#d3d3d3'; // lichtgrijs
+    label.style.borderRadius = '4px';
+  }
+
+  const dag = dayNames[day];
+  const datum = d.toISOString().slice(5,10).replace('-', '/');
+  label.textContent = `${dag} ${datum}`;
+  labelsDiv.appendChild(label);
+}
+timeline.appendChild(labelsDiv);
+
+  const agendas = Object.keys(eventsByAgenda);
+  agendas.forEach((agendaKey, i) => {
+    const agenda = (regionSelect.value === 'alle' ? allAgendas : agendasPerRegion[regionSelect.value])[agendaKey];
+    if(!agenda) return;
+    const row = document.createElement('div');
+    row.className = 'agenda-row';
+    row.style.position = 'relative';
+
+    // Naam links
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'agenda-name';
+    nameDiv.textContent = agenda.name;
+    row.appendChild(nameDiv);
+
+    // Events
+    const msPerDay = 24*3600*1000;
+    eventsByAgenda[agendaKey].forEach(ev => {
+      // filter buiten tijdbalk
+      if(ev.end < now || ev.start > endDate) return;
+      const startX = Math.max(0, (ev.start - now) / msPerDay);
+      const endX = Math.min(14, (ev.end - now) / msPerDay);
+      const width = endX - startX;
+      if(width <= 0) return;
+
+      const bar = document.createElement('div');
+      bar.className = 'event-bar';
+      bar.style.background = agenda.color;
+      bar.style.left = `calc(${(startX/14)*100}% + 60px)`; // 60px margin for names
+      bar.style.width = `calc(${(width/14)*100}%)`;
+      bar.title = ev.summary + "\n" + ev.start.toLocaleString() + " - " + ev.end.toLocaleString();
+      bar.textContent = ev.summary;
+      row.appendChild(bar);
+    });
+
+    timeline.appendChild(row);
+  });
+}
+
+// --- LAAD EVENTS EN RENDER ---
+async function loadAndRenderEvents() {
+  timeline.innerHTML = "<em>Evenementen laden...</em>";
+  const region = regionSelect.value;
+  const agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+  const selected = selectedCheckboxes[region];
+
+  // Filter gekozen agenda keys
+  const keysToLoad = Array.from(selected).filter(k => agendas[k]);
+
+  const eventsByAgenda = {};
+  for(const key of keysToLoad) {
+    const url = agendas[key].url;
+    console.log("Laden agenda:", agendas[key].name, url);
+    const data = await loadICS(url);
+    console.log("ICS data ontvangen, lengte:", data.length);
+    const events = parseICS(data);
+    console.log(`Geparse events voor ${agendas[key].name}:`, events);
+    eventsByAgenda[key] = events;
+  }
+  renderTimeline(eventsByAgenda);
+}
+
+// Init
+buildCheckboxes('alle');
+loadAndRenderEvents();
+</script>
+</body>
+</html>
