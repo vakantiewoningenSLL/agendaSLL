@@ -132,6 +132,17 @@
     </div>
 
     <div class="content" aria-live="polite">
+
+      <div style="margin-bottom: 1rem;">
+        <label for="viewSelect"><strong>Weergave:</strong></label>
+        <select id="viewSelect" aria-label="Kies agenda weergave">
+          <option value="MONTH">Maand</option>
+          <option value="WEEK">Week</option>
+          <option value="DAY">Dag</option>
+          <option value="AGENDA">Lijst</option>
+        </select>
+      </div>
+
       <div class="agenda-wrapper">
         <iframe id="calendarFrame"
           src=""
@@ -150,6 +161,7 @@
   const container = document.getElementById('checkboxContainer');
   const regionSelect = document.getElementById('regionSelect');
   const toggleAll = document.getElementById('toggleAll');
+  const viewSelect = document.getElementById('viewSelect');
 
   const agendasPerRegion = {
     noord: {
@@ -270,78 +282,119 @@
       nieuw_ehrenstein_peedssjtal: {
         id: "3ot3kcg5tg225i90q8ag0kd35gh2p62k@import.calendar.google.com",
         color: "#8a6642",
-        name: "Nieuw Ehrenstein Peëdssjtal"
-      },
-      nieuw_ehrenstein_remise: {
-        id: "3sg82m1jef3lfhn06tvcnqsc0mo2s2ov@import.calendar.google.com",
-        color: "#8a6642",
-        name: "Nieuw Ehrenstein Remise"
-      },
-      nieuw_ehrenstein_villa: {
-        id: "brtndu8psmjhktqqkagor03r1ts14jdk@import.calendar.google.com",
-        color: "#8a6642",
-        name: "Nieuw Ehrenstein Villa"
-      },
-      nieuw_ehrenstein_villa_xs: {
-        id: "27gltnc143kaqus2rbbu2hh172ljci0k@import.calendar.google.com",
-        color: "#8a6642",
-        name: "Nieuw Ehrenstein Villa XS"
+        name: "Nieuw Ehrenstein Peedssjtal"
       }
     }
   };
 
-  const allAgendas = {...agendasPerRegion.noord, ...agendasPerRegion.midden, ...agendasPerRegion.zuid};
+  // Alle agenda's van alle regio's samenvoegen
+  const allAgendas = Object.assign({}, 
+    agendasPerRegion.noord,
+    agendasPerRegion.midden,
+    agendasPerRegion.zuid
+  );
 
-  // Sets van geselecteerde checkboxen per regio (standaard allemaal geselecteerd)
+  // Welke agenda's geselecteerd zijn per regio
   const selectedCheckboxes = {
-    alle: new Set(Object.keys(allAgendas)),
-    noord: new Set(Object.keys(agendasPerRegion.noord)),
-    midden: new Set(Object.keys(agendasPerRegion.midden)),
-    zuid: new Set(Object.keys(agendasPerRegion.zuid))
+    alle: [],
+    noord: [],
+    midden: [],
+    zuid: []
   };
 
-  // Bouw checkboxes alfabetisch
-  function buildCheckboxes(region) {
-    container.innerHTML = "";
-    const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
-    const sortedKeys = Object.keys(agendas).sort((a,b) => agendas[a].name.localeCompare(agendas[b].name));
-    for (const key of sortedKeys) {
-      const agenda = agendas[key];
-      const label = document.createElement('label');
+  // Huidige view mode
+  let currentMode = 'MONTH';
 
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = key;
-      checkbox.checked = selectedCheckboxes[region].has(key);
+  // Functie om checkboxes te renderen in sidebar
+function renderCheckboxes(region) {
+  container.innerHTML = ''; // leeg maken
+  let agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+  if (!agendas) return;
 
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) {
-          selectedCheckboxes[region].add(key);
-        } else {
-          selectedCheckboxes[region].delete(key);
-        }
-        updateIframeSrc();
-        updateToggleAll();
-      });
+  const selected = [];
 
-      const colorBox = document.createElement('span');
-      colorBox.className = 'color-box';
-      colorBox.style.background = agenda.color;
+  for (const [key, agenda] of Object.entries(agendas)) {
+    const label = document.createElement('label');
+    label.htmlFor = `cb_${key}`;
 
-      label.appendChild(checkbox);
-      label.appendChild(colorBox);
-      label.appendChild(document.createTextNode(agenda.name));
-      container.appendChild(label);
-    }
-    updateToggleAll();
+    const colorBox = document.createElement('span');
+    colorBox.className = 'color-box';
+    colorBox.style.backgroundColor = agenda.color;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = `cb_${key}`;
+    checkbox.value = key;
+    checkbox.name = 'agendaCheckbox';
+    checkbox.checked = true; // ✅ standaard aangevinkt
+
+    label.appendChild(checkbox);
+    label.appendChild(colorBox);
+    label.appendChild(document.createTextNode(agenda.name));
+
+    container.appendChild(label);
+
+    selected.push(key);
+
+    // Checkbox klik handler
+    checkbox.addEventListener('change', () => {
+      updateSelected(region);
+    });
   }
 
-  // Update iframe met geselecteerde agenda's
+  selectedCheckboxes[region] = selected;
+  toggleAll.checked = true; // ✅ ook toggleAll actief
+
+  updateIframeSrc();
+}
+
+  // Update de geselecteerde agenda's voor de regio
+  function updateSelected(region) {
+    const checkboxes = container.querySelectorAll('input[type=checkbox]');
+    selectedCheckboxes[region] = Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+
+    // Check of alles aangevinkt is om toggleAll te syncen
+    const agendas = region === 'alle' ? allAgendas : agendasPerRegion[region];
+    toggleAll.checked = selectedCheckboxes[region].length === Object.keys(agendas).length;
+
+    updateIframeSrc();
+  }
+
+  // Toggle alles selecteren / deselecteren
+  toggleAll.addEventListener('change', () => {
+    const checkboxes = container.querySelectorAll('input[type=checkbox]');
+    const checkAll = toggleAll.checked;
+    checkboxes.forEach(cb => cb.checked = checkAll);
+
+    const region = regionSelect.value;
+    selectedCheckboxes[region] = checkAll
+      ? Object.keys(region === 'alle' ? allAgendas : agendasPerRegion[region])
+      : [];
+
+    updateIframeSrc();
+  });
+
+  // Wanneer regio verandert, update checkboxes en selectie
+  regionSelect.addEventListener('change', () => {
+    const region = regionSelect.value;
+    renderCheckboxes(region);
+  });
+
+  // View mode selecteren
+  viewSelect.addEventListener('change', () => {
+    currentMode = viewSelect.value;
+    updateIframeSrc();
+  });
+
+  // URL voor iframe updaten op basis van selectie en view
   function updateIframeSrc() {
     const region = regionSelect.value;
     const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
-    const selected = region === "alle" ? selectedCheckboxes.alle : selectedCheckboxes[region];
-    const baseUrl = "https://calendar.google.com/calendar/embed?mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0";
+    const selected = selectedCheckboxes[region];
+
+    const baseUrl = `https://calendar.google.com/calendar/embed?mode=${currentMode}&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0`;
 
     let url = baseUrl;
     for (const key of selected) {
@@ -350,44 +403,12 @@
         url += `&src=${encodeURIComponent(agenda.id)}&color=${encodeURIComponent(agenda.color)}`;
       }
     }
+
     iframe.src = url;
   }
 
-  // Update toggleAll checkbox status
-  function updateToggleAll() {
-    const region = regionSelect.value;
-    const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
-    const selected = region === "alle" ? selectedCheckboxes.alle : selectedCheckboxes[region];
-
-    toggleAll.checked = Object.keys(agendas).length === selected.size;
-  }
-
-  // Toggle alle checkboxes aan/uit
-  toggleAll.addEventListener('change', () => {
-    const region = regionSelect.value;
-    const agendas = region === "alle" ? allAgendas : agendasPerRegion[region];
-    const setTo = toggleAll.checked;
-
-    for (const key of Object.keys(agendas)) {
-      if (setTo) {
-        selectedCheckboxes[region].add(key);
-      } else {
-        selectedCheckboxes[region].delete(key);
-      }
-    }
-    buildCheckboxes(region);
-    updateIframeSrc();
-  });
-
-  // Bij regio wijzigen
-  regionSelect.addEventListener('change', () => {
-    buildCheckboxes(regionSelect.value);
-    updateIframeSrc();
-  });
-
-  // Init eerste keer
-  buildCheckboxes(regionSelect.value);
-  updateIframeSrc();
+  // Init: start met 'alle' regio
+  renderCheckboxes('alle');
 
 </script>
 
